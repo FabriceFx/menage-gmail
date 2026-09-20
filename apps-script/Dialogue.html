@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --md-sys-color-primary: #0b57d0;
+      --md-sys-color-on-primary: #ffffff;
+      --md-sys-color-surface: #ffffff;
+      --md-sys-color-on-surface: #1f1f1f;
+      --md-sys-color-outline: #74777f;
+      --md-sys-color-error: #b3261e;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      margin: 0;
+      padding: 24px;
+      background-color: var(--md-sys-color-surface);
+      color: var(--md-sys-color-on-surface);
+      display: flex;
+      flex-direction: column;
+      height: 100vh; /* Using vh allows the box to fit the modal */
+      box-sizing: border-box;
+    }
+    .content-area {
+      flex-grow: 1;
+      overflow-y: auto;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .content-area p {
+      margin-top: 0;
+    }
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(0,0,0,0.1);
+      flex-shrink: 0;
+    }
+    .btn {
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      padding: 10px 24px;
+      border-radius: 100px;
+      cursor: pointer;
+      transition: background-color 0.2s, box-shadow 0.2s;
+      border: none;
+      outline: none;
+    }
+    .btn-primary {
+      background-color: var(--md-sys-color-primary);
+      color: var(--md-sys-color-on-primary);
+    }
+    .btn-primary:hover {
+      box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+      background-color: #0842a0;
+    }
+    .btn-secondary {
+      background-color: transparent;
+      color: var(--md-sys-color-primary);
+      border: 1px solid var(--md-sys-color-outline);
+    }
+    .btn-secondary:hover {
+      background-color: rgba(11, 87, 208, 0.08);
+    }
+    #loading {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      color: var(--md-sys-color-primary);
+      font-weight: 500;
+      font-size: 14px;
+    }
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(11, 87, 208, 0.2);
+      border-top-color: var(--md-sys-color-primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { 
+      to { transform: rotate(360deg); } 
+    }
+    a {
+      color: var(--md-sys-color-primary);
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="content-area" id="content">
+    <?!= corps ?>
+  </div>
+
+  <div class="actions">
+    <div id="loading">
+      <div class="spinner"></div>
+      <span id="loading-text"></span>
+    </div>
+    <div id="button-group">
+      <? if (type === 'confirmation') { ?>
+        <button class="btn btn-secondary" onclick="fermer()"><?= texteNon ?></button>
+        <button class="btn btn-primary" onclick="valider()"><?= texteOui ?></button>
+      <? } else { ?>
+        <button class="btn btn-primary" onclick="fermer()"><?= texteOk ?></button>
+      <? } ?>
+    </div>
+  </div>
+
+  <script>
+    function fermer() {
+      google.script.host.close();
+    }
+    function valider() {
+      document.getElementById('button-group').style.display = 'none';
+      const loading = document.getElementById('loading');
+      document.getElementById('loading-text').innerText = <?= texteChargement ?>;
+      loading.style.display = 'flex';
+      
+      const action = <?= actionCallback ?>;
+      if (action) {
+        google.script.run
+          .withSuccessHandler(function(res) { 
+             if (res && res.titre) {
+               document.title = res.titre;
+             }
+             if (res && res.corps) {
+               document.getElementById('content').innerHTML = res.corps;
+               document.getElementById('button-group').innerHTML = '<button class="btn btn-primary" onclick="fermer()"><?= texteOk ?></button>';
+               document.getElementById('button-group').style.display = 'block';
+               loading.style.display = 'none';
+             } else {
+               google.script.host.close(); 
+             }
+          })
+          .withFailureHandler(function(err) {
+             document.getElementById('content').innerHTML = '<span style="color:var(--md-sys-color-error); font-weight: 500;">Erreur / Error :</span><br><br>' + err.message;
+             document.getElementById('button-group').innerHTML = '<button class="btn btn-secondary" onclick="fermer()"><?= texteOk ?></button>';
+             document.getElementById('button-group').style.display = 'block';
+             loading.style.display = 'none';
+          })
+          [action]();
+      } else {
+        fermer();
+      }
+    }
+  </script>
+</body>
+</html>
