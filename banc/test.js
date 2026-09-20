@@ -672,19 +672,107 @@ verifier('la fonction de reprise existe et porte le nom déclaré', () => {
     `un déclencheur est résolu par son nom global : « ${nom} » doit être une function déclarée`);
 });
 
+/**
+ * Les cibles de menu, lues sur l'appel `addItem` quelle que soit la forme du
+ * libellé — littéral ou appel de traduction. La version précédente du banc
+ * n'acceptait qu'un littéral, et le passage au bilinguisme l'a rendue aveugle :
+ * elle ne trouvait plus aucune cible et déclarait toutes les fonctions
+ * intruses. Un contrôle qui cesse de voir doit échouer, pas se taire — d'où le
+ * cas suivant, qui vérifie qu'il en trouve.
+ */
+const ciblesDeMenu = (source) => [...source.matchAll(/addItem\([^,]+,\s*'([^']+)'\)/g)]
+  .map((trouve) => trouve[1]);
+
+/** Les noms passés aux modales, donc appelés par `google.script.run`. */
+const ciblesDeModale = (source) => [...source.matchAll(
+  /MenageUi\.afficher(?:Travail|Confirmation)\([\s\S]*?'([a-zA-Z]+)'\s*\)/g)]
+  .map((trouve) => trouve[1]);
+
 verifier('les cibles de menu et de déclencheur sont des function déclarées', () => {
   const source = fichiersSource()
     .map((fichier) => fs.readFileSync(path.join(SOURCES, fichier), 'utf8')).join('\n');
 
-  const cibles = [...source.matchAll(/addItem\('[^']*', '([^']+)'\)/g)].map((m) => m[1]);
-  cibles.push('onOpen', 'executerLeMenageQuotidien');
+  const cibles = ciblesDeMenu(source);
+  vrai(cibles.length > 5, `le menu doit exposer ses points d’entrée (trouvé ${cibles.length})`);
 
-  vrai(cibles.length > 5, 'le menu doit exposer ses points d’entrée');
-  cibles.forEach((nom) => {
+  [...cibles, 'onOpen', 'executerLeMenageQuotidien'].forEach((nom) => {
     if (!new RegExp(`^function ${nom}\\(`, 'm').test(source)) {
       throw new Error(`« ${nom} » est cité au menu mais n’est pas une function déclarée`);
     }
   });
+});
+
+/*
+ * Le cas qui manquait, et qui a coûté une version.
+ *
+ * `google.script.run` ne peut pas appeler une fonction dont le nom se termine
+ * par un trait de soulignement : elle est privée, et son nom n'est jamais
+ * envoyé au client. L'appel devient `undefined()`, ce qui lève côté navigateur
+ * — hors de portée de `withFailureHandler`, qui n'écoute que le serveur. La
+ * modale reste figée sur son rouet, boutons déjà masqués.
+ *
+ * Rien dans le projet ne signalait cela : le code se chargeait, la syntaxe
+ * était juste, et le banc était vert.
+ */
+verifier('la cible de google.script.run est publique et déclarée', () => {
+  const source = fichiersSource()
+    .map((fichier) => fs.readFileSync(path.join(SOURCES, fichier), 'utf8')).join('\n');
+  const gabarit = fs.readFileSync(path.join(SOURCES, 'Dialogue.html'), 'utf8');
+
+  /*
+   * Les maillons de la chaîne sont les lignes qui commencent par un point.
+   *
+   * Ni une borne en caractères ni une coupe au premier point-virgule ne
+   * tiennent : les gestionnaires passés à `withSuccessHandler` sont des
+   * fonctions entières, qui contiennent leurs propres `;` et leurs propres
+   * appels de méthode. C'est l'indentation qui distingue la chaîne de ce
+   * qu'elle transporte.
+   */
+  vrai(gabarit.includes('google.script.run'), 'le gabarit doit appeler le serveur');
+  const appelees = [...gabarit.matchAll(/^\s*\.([A-Za-z0-9_]+)\(/gm)]
+    .map((trouve) => trouve[1])
+    .filter((nom) => !['withSuccessHandler', 'withFailureHandler', 'withUserObject'].includes(nom));
+
+  vrai(appelees.length > 0, 'le gabarit doit appeler au moins une fonction serveur');
+
+  appelees.forEach((nom) => {
+    if (nom.endsWith('_')) {
+      throw new Error(
+        `« ${nom} » se termine par un trait de soulignement : google.script.run ne peut `
+        + 'pas l’appeler, son nom n’est jamais envoyé au client');
+    }
+    if (!new RegExp(`^function ${nom}\\(`, 'm').test(source)) {
+      throw new Error(`« ${nom} » est appelée par le gabarit mais n’est pas une function déclarée`);
+    }
+  });
+});
+
+verifier('toute action de modale existe dans la table du menu', () => {
+  const contexte = chargerProjet();
+  const source = fichiersSource()
+    .map((fichier) => fs.readFileSync(path.join(SOURCES, fichier), 'utf8')).join('\n');
+
+  const table = contexte.lire('MENAGE_MODALE_ACTIONS_');
+  const demandees = [...new Set(ciblesDeModale(source))];
+
+  vrai(demandees.length > 0, 'le menu doit lancer au moins une action');
+  demandees.forEach((nom) => {
+    if (typeof table[nom] !== 'function') {
+      throw new Error(`« ${nom} » est passée à une modale mais n’est pas dans la table`);
+    }
+  });
+});
+
+verifier('une action inconnue est refusée en nommant celles qui existent', () => {
+  const contexte = contexteInstalle();
+  let leve = null;
+  try {
+    contexte.lire('menageExecuterAction')('nImporteQuoi');
+  } catch (erreur) { leve = erreur; }
+
+  vrai(leve !== null, 'un nom venu du navigateur ne doit jamais être exécuté à l’aveugle');
+  vrai(String(leve.message).includes('preparer'),
+    'l’erreur doit nommer les actions connues, pour qu’on sache quoi corriger');
 });
 
 verifier('aucune fonction interne n’encombre le menu d’exécution', () => {
@@ -692,12 +780,117 @@ verifier('aucune fonction interne n’encombre le menu d’exécution', () => {
     .map((fichier) => fs.readFileSync(path.join(SOURCES, fichier), 'utf8')).join('\n');
 
   const declarees = [...source.matchAll(/^function ([A-Za-z0-9_]+)\(/gm)].map((m) => m[1]);
-  const attendues = [...source.matchAll(/addItem\('[^']*', '([^']+)'\)/g)].map((m) => m[1]);
-  attendues.push('onOpen', 'executerLeMenageQuotidien', 'reprendreLApplicationDuMenage');
+  const attendues = [
+    ...ciblesDeMenu(source),
+    'onOpen',
+    'executerLeMenageQuotidien',
+    'reprendreLApplicationDuMenage',
+    // Cible de `google.script.run` : elle n'a pas le choix d'être publique.
+    'menageExecuterAction',
+  ];
 
   const intruses = declarees.filter((nom) => !attendues.includes(nom));
   egal(intruses, [],
     'tout l’interne doit être en const fléchée, invisible du menu d’exécution');
+});
+
+/* ==========================================================================
+ * 10. Traductions
+ *    Une clé manquante ne casse rien : elle retombe sur l'anglais, puis sur
+ *    son propre nom, et l'utilisateur lit « texte_confirmer » dans un
+ *    dialogue. Un défaut qui ne casse rien est un défaut qu'on livre.
+ * ======================================================================= */
+
+const dictionnaires = () => chargerProjet().lire('MENAGE_TRADUCTIONS_');
+
+verifier('les deux langues portent exactement les mêmes clés', () => {
+  const { fr, en } = dictionnaires();
+  egal(Object.keys(fr).filter((cle) => !(cle in en)), [], 'clés absentes de l’anglais');
+  egal(Object.keys(en).filter((cle) => !(cle in fr)), [], 'clés absentes du français');
+});
+
+verifier('les jetons {0}, {1}… sont accordés entre les deux langues', () => {
+  const { fr, en } = dictionnaires();
+  const jetons = (texte) => [...new Set([...String(texte).matchAll(/\{(\d+)\}/g)]
+    .map((trouve) => trouve[1]))].sort();
+
+  Object.keys(fr).forEach((cle) => {
+    const cote = jetons(fr[cle]);
+    const autre = jetons(en[cle]);
+    if (JSON.stringify(cote) !== JSON.stringify(autre)) {
+      throw new Error(`« ${cle} » attend ${JSON.stringify(cote)} en français `
+        + `et ${JSON.stringify(autre)} en anglais : un jeton resterait littéral`);
+    }
+  });
+});
+
+verifier('toute clé citée dans le code existe, et aucune n’est orpheline', () => {
+  const { fr } = dictionnaires();
+  const source = fs.readdirSync(SOURCES)
+    .filter((nom) => nom.endsWith('.gs') || nom.endsWith('.html'))
+    .map((nom) => fs.readFileSync(path.join(SOURCES, nom), 'utf8')).join('\n');
+
+  const citees = [...new Set([...source.matchAll(/menageTraductions_\(\s*'([^']+)'/g)]
+    .map((trouve) => trouve[1]))];
+  egal(citees.filter((cle) => !(cle in fr)), [], 'clés citées mais absentes du dictionnaire');
+
+  /*
+   * Pour les orphelines, on cherche le littéral où qu'il soit : une clé peut
+   * être choisie par un ternaire — `menageTraductions_(x ? 'oui' : 'non')` —
+   * et la regex d'appel ne voit alors que la première.
+   */
+  const horsDictionnaire = fs.readdirSync(SOURCES)
+    .filter((nom) => nom !== 'MenageTraductions.gs' && (nom.endsWith('.gs') || nom.endsWith('.html')))
+    .map((nom) => fs.readFileSync(path.join(SOURCES, nom), 'utf8')).join('\n');
+
+  egal(Object.keys(fr).filter((cle) => !horsDictionnaire.includes(`'${cle}'`)), [],
+    'clés du dictionnaire que plus personne n’affiche');
+});
+
+verifier('une locale illisible retombe sur l’anglais sans lever', () => {
+  // Une exception dans onOpen ferait disparaître le menu entier.
+  const contexte = chargerProjet();
+  contexte.sandbox.Session.getActiveUserLocale = () => { throw new Error('No user'); };
+  egal(contexte.lire('menageTraductions_')('bouton_ok'), 'Close',
+    'le menu doit survivre à une locale indisponible');
+});
+
+/* ==========================================================================
+ * 11. Échappement des modales
+ * ======================================================================= */
+
+verifier('un résumé est échappé avant d’entrer dans une modale', () => {
+  const contexte = chargerProjet();
+  const rendu = contexte.lire('menageTexteVersHtml_')('<script>alert(1)</script>');
+  faux(rendu.includes('<script'),
+    'une modale ne doit jamais rendre du balisage qu’elle n’a pas écrit');
+  vrai(rendu.includes('&lt;script'), 'le texte doit rester lisible une fois échappé');
+});
+
+verifier('l’indentation d’un résumé survit au passage en HTML', () => {
+  const contexte = chargerProjet();
+  const rendu = contexte.lire('menageTexteVersHtml_')('EXAMEN\n    Corbeille : 3');
+  vrai(rendu.includes('<br>'), 'les sauts de ligne deviennent des <br>');
+  vrai(rendu.includes('&nbsp;&nbsp;&nbsp;&nbsp;Corbeille'),
+    'HTML réduirait les quatre espaces à un seul');
+});
+
+verifier('le gabarit n’injecte jamais un message d’erreur en innerHTML', () => {
+  const gabarit = fs.readFileSync(path.join(SOURCES, 'Dialogue.html'), 'utf8');
+  const bloc = gabarit
+    .slice(gabarit.indexOf('withFailureHandler'), gabarit.indexOf('.menageExecuterAction'))
+    // Sans quoi c'est le commentaire expliquant qu'on n'en veut pas qui
+    // déclenche le contrôle — le piège est exactement celui du « in:inbox »
+    // cité dans le texte d'« À propos ».
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  faux(/innerHTML/.test(bloc),
+    'un message d’erreur recopie parfois une cellule du classeur : textContent, pas innerHTML');
+});
+
+verifier('le gabarit ne charge aucune ressource externe', () => {
+  const gabarit = fs.readFileSync(path.join(SOURCES, 'Dialogue.html'), 'utf8');
+  faux(/<link[^>]+href="https?:/.test(gabarit), 'aucune feuille de style distante');
+  faux(/<script[^>]+src="https?:/.test(gabarit), 'aucun script distant');
 });
 
 verifier('le projet n’envoie aucun message et ne lit pas la boîte de réception', () => {

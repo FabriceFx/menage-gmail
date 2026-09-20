@@ -3,11 +3,99 @@
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 Ce projet suit le [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [1.1.1] - 2026-09-20
+
+Version corrective. La 1.1.0 ne fonctionnait pas : aucune de ses fenêtres ne
+pouvait exécuter l'action qu'elle proposait.
+
+### Corrigé
+
+- **Les six boutons de confirmation étaient morts.** Les cibles appelées depuis
+  les modales — `executerAppliquerPlan_`, `executerInstallerClasseur_`… —
+  portaient un trait de soulignement final. Or la documentation d'Apps Script
+  est formelle : « les fonctions serveur dont le nom se termine par un trait de
+  soulignement sont considérées comme privées ; elles ne peuvent pas être
+  appelées par `google.script` et leurs noms ne sont jamais envoyés au client ».
+
+  Le navigateur appelait donc `undefined()`. L'erreur naissait **côté client**,
+  hors de portée de `withFailureHandler` qui n'écoute que le serveur, et les
+  boutons avaient déjà été masqués : la fenêtre restait figée sur son rouet,
+  sans autre issue que de la fermer. Les six actions du menu étaient
+  inopérantes.
+
+  Un seul nom est désormais exposé, `menageExecuterAction`, qui aiguille sur
+  une table fermée. Un nom de plus au menu d'exécution au lieu de six, et la
+  liste de ce qui est atteignable depuis le navigateur se lit d'un coup d'œil.
+
+- **Le banc ne pouvait pas voir ce défaut, et il ne voyait plus le menu non
+  plus.** Il extrayait les cibles de menu par une expression régulière qui
+  n'acceptait qu'un libellé littéral ; le passage au bilinguisme l'a rendu
+  aveugle, et il déclarait alors toutes les fonctions intruses. Un contrôle qui
+  cesse de voir doit échouer, jamais se taire — il vérifie maintenant qu'il
+  trouve bien ses cibles, et onze cas ont été ajoutés : la règle du trait de
+  soulignement, l'accord des deux dictionnaires, l'échappement des résumés,
+  l'absence de ressource externe dans le gabarit.
+
+- **Le titre rendu par les callbacks n'était jamais affiché.** Le gabarit posait
+  `document.title`, mais la barre de titre d'une modale est rendue par Sheets,
+  hors de l'iframe, et fixée une fois par `showModalDialog`. Les titres décrivent
+  désormais l'opération entière dès l'ouverture, au lieu de son état.
+
+- **Les résumés perdaient leur mise en forme.** `menageResumePreparation_` aligne
+  ses blocs avec quatre espaces, que HTML réduit à un seul : les sections
+  « EXAMEN » et « PAR ÉTAT » arrivaient en pavé.
+
+- **Le guide d'installation faisait échouer l'installation.** Il demandait de
+  créer *chaque* fichier par le bouton « Script ». `Dialogue.html` doit être
+  créé par le bouton « HTML » — du HTML collé dans un `.gs` empêche le projet
+  entier de se charger, et toutes ses fonctions deviennent introuvables d'un
+  coup. Ni `Dialogue`, ni `MenageUi`, ni `MenageTraductions` n'étaient mentionnés
+  dans la documentation.
+
+- **Le journal décrivait ce qui n'existe pas.** La 1.1.0 annonçait des effets
+  « ripple » et des « transitions fluides » : il n'y a aucun ripple dans le
+  gabarit, seulement une transition de couleur au survol. Entrée corrigée.
+
+- **« À propos » avait perdu sa compensation vérifiable.** Le texte énonçait
+  toujours que `mail.google.com` est la portée la plus étroite disponible, mais
+  la phrase disant *comment le vérifier* avait disparu. Une portée large ne
+  s'accepte qu'en échange d'une garantie qu'on peut contrôler.
+
+### Modifié
+
+- **Les confirmations sont réservées à ce qui mérite d'être refusé.** La 1.1.0
+  demandait « Préparer le plan ? » avant une opération qui ne modifie rien, et
+  « Installer ou compléter le classeur ? » avant une opération rejouable sans
+  risque. Quand tout demande confirmation, plus rien ne la mérite : on finit par
+  cliquer « Oui » sans lire, et c'est devant la suppression définitive qu'on
+  aurait dû s'arrêter. Seules l'application du plan et la programmation du
+  ménage quotidien posent désormais une question ; les autres actions passent
+  par `afficherTravail`, qui lance et rend compte.
+
+- **Les textes venus d'ailleurs sont échappés avant d'entrer dans une fenêtre.**
+  Les valeurs du dictionnaire restent du HTML de confiance ; tout le reste —
+  résumé, nom d'onglet, message d'erreur — passe par `menageTexteVersHtml_`.
+  Côté client, un message d'erreur s'écrit en `textContent` et non plus en
+  `innerHTML` : il recopie parfois une cellule du classeur, et un outil qui
+  rendrait le balisage d'une escroquerie serait une curieuse façon de s'en
+  protéger.
+
+- **Le dialogue ne charge plus de police distante.** Une requête vers Google
+  Fonts par ouverture, pour une fenêtre qui vit quelques secondes : la police
+  arrivait rarement à temps, et le texte changeait de graisse quand elle
+  arrivait.
+
+- `texte_programmer` ne s'affiche plus deux fois : la question est au
+  conditionnel avant l'action, la confirmation au passé après.
+- `titre_erreur`, qui servait de titre à six dialogues qui n'étaient pas des
+  erreurs, devient `titre_outil`.
+- `SocleTexte.gs` recopié du socle, pour son échappement HTML.
+
 ## [1.1.0] - 2026-09-20
 
 ### Modifié
 - **Bilinguisme (FR/EN)** : Centralisation des traductions dans `MenageTraductions.gs` avec détection automatique de la locale de l'utilisateur.
-- **Refonte UI (Material Design 3)** : Remplacement intégral des alertes Google Sheets natives par des fenêtres modales HTML/CSS asynchrones via `MenageUi.gs` et `Dialogue.html`. L'expérience gagne en esthétique (effets "ripple", transitions fluides) et en ergonomie (jauges de chargement pour les actions longues).
+- **Refonte de l'interface** : Remplacement intégral des alertes Google Sheets natives par des fenêtres modales HTML/CSS asynchrones via `MenageUi.gs` et `Dialogue.html`, avec un indicateur d'avancement pour les actions longues.
 - **Menu À propos** : Ajout de la mention obligatoire du développeur, et renforcement du discours autour du gain de temps procuré par l'automatisation.
 
 ### Ajouté

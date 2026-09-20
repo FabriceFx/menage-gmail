@@ -31,13 +31,25 @@ puisse déclencher.
 
 ## 2. Copier le code
 
-Dans l'éditeur Apps Script, pour **chaque** fichier du dossier `apps-script/` :
+Le dossier `apps-script/` contient **deux sortes de fichiers**, et l'éditeur
+les crée par deux boutons différents. Se tromper ici est la façon la plus sûre
+de tout casser : du HTML collé dans un fichier de script empêche le projet
+entier de se charger, et **toutes** ses fonctions deviennent introuvables d'un
+coup — y compris celles qui n'ont rien à voir.
+
+**Les fichiers `.gs`** — tous sauf un. Pour chacun :
 
 1. Cliquez sur **+** à côté de « Fichiers », puis **Script**.
 2. Nommez-le comme le fichier source, **sans l'extension** : `MenageConfig`,
    `MenageMenu`, `MenageTexte`, et ainsi de suite.
 3. Collez-y le contenu du fichier, en remplaçant le `function myFunction() {}`
    que l'éditeur y met d'office.
+
+**Le fichier `Dialogue.html`** — celui-là seulement :
+
+1. Cliquez sur **+**, puis **HTML** (et non « Script »).
+2. Nommez-le `Dialogue`. L'éditeur ajoute `.html` tout seul.
+3. Remplacez tout le contenu proposé par celui de `apps-script/Dialogue.html`.
 
 Le fichier `Code.gs` créé par défaut peut être supprimé une fois les autres
 posés.
@@ -61,8 +73,13 @@ autorisations demandées.
 
 Menu **Exécuter** en haut de l'éditeur : la liste déroulante doit proposer une
 dizaine de fonctions, **et uniquement celles qui commencent par un verbe** —
-`preparerLePlanDeMenage`, `installerLeClasseur`, `afficherAPropos`… Si vous y
-voyez des noms comme `menageJuger_`, un fichier a été mal collé.
+`preparerLePlanDeMenage`, `installerLeClasseur`, `afficherAPropos`… plus
+`menageExecuterAction`, qui est la seule fonction que les fenêtres de l'outil
+ont le droit d'appeler. Si vous y voyez des noms comme `menageJuger_`, un
+fichier a été mal collé.
+
+Ne lancez jamais `menageExecuterAction` depuis ce menu : elle attend le nom
+d'une action et vous le dira.
 
 Si le menu déroulant est vide ou affiche une erreur, c'est que le projet ne se
 charge pas : le plus souvent, un fichier a été collé deux fois. Deux fichiers
@@ -89,6 +106,12 @@ fonctionner.
 > permette la suppression. L'outil n'envoie aucun message et n'interroge que la
 > corbeille et le spam ; le banc d'essai refuse toute modification qui
 > contredirait cela.
+
+> **Français ou anglais ?** L'outil suit la langue de votre compte Google :
+> menus, fenêtres et messages passent en anglais si votre compte est en
+> anglais. Les noms des onglets et des colonnes, eux, restent en français —
+> ils servent de clés au code et les traduire casserait les classeurs
+> existants.
 
 Revenez au classeur : six onglets y sont apparus — « Réglages », « Marques », « Expressions », « Protégés », « Quarantaine » et « Guide ». Les onglets « Plan » et « Journal » n'apparaîtront qu'au premier usage. Ouvrez **Guide** et lisez-le,
 il tient en un écran.
@@ -125,8 +148,10 @@ manque, rechargez la page.
 
 **Ménage Gmail > 1. Préparer le plan.**
 
-Selon la taille de votre corbeille, comptez d'une seconde à deux minutes. Une
-fenêtre résume ce qui a été examiné :
+Une fenêtre s'ouvre aussitôt et affiche son avancement — selon la taille de
+votre corbeille, comptez d'une seconde à deux minutes. Rien n'est modifié
+pendant ce temps : la préparation ne fait que lire, c'est pourquoi elle ne
+demande aucune confirmation. Puis le résumé s'affiche dans la même fenêtre :
 
 ```
 124 ligne(s) au plan « Plan — ménage », dont 118 déjà cochée(s).
@@ -181,8 +206,13 @@ Une suppression définitive ne se récupère pas.
 Continuer ?
 ```
 
-Après application, chaque ligne du plan porte son état et l'heure à laquelle
-elle a été traitée.
+C'est l'une des deux seules questions que l'outil vous pose — l'autre étant la
+programmation du ménage quotidien. Tout le reste s'exécute sans confirmation,
+et c'est délibéré : une question posée à chaque geste finit par se répondre
+sans être lue, et c'est celle-ci qu'on cesserait de lire.
+
+Le résultat s'affiche dans la même fenêtre, et chaque ligne du plan porte
+ensuite son état et l'heure à laquelle elle a été traitée.
 
 Si l'exécution atteint le plafond des six minutes, elle s'arrête proprement,
 pose une reprise automatique dans la minute, et repart exactement où elle en

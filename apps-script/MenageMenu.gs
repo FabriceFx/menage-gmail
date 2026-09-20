@@ -2,34 +2,40 @@
  * Ménage Gmail — points d'entrée. Introduit en v1.0.
  *
  * Le seul fichier du projet qui déclare des `function`. L'éditeur Apps Script
- * ne propose au menu d'exécution que celles-là ; tout l'interne du projet est
- * écrit en `const nom_ = (…) => …` et reste invisible. La séparation entre ce
- * qu'on lance et ce qui est appelé se lit donc dans la forme du code, et l'on
- * ne déclenche plus par mégarde une fonction interne à la place d'un point
- * d'entrée — ce qui, ici, ferait tourner le traitement hors de tout verrou.
+ * ne propose au menu d'exécution que celles-là ; tout l'interne est écrit en
+ * `const nom_ = (…) => …` et reste invisible. La séparation entre ce qu'on
+ * lance et ce qui est appelé se lit donc dans la forme du code.
  *
- * Les cibles de déclencheurs et les gestionnaires de menu sont résolus par
- * leur nom global au moment où ils se réveillent : ils n'ont pas le choix
- * d'être des `function` déclarées.
+ * ## Trois sortes de noms qui n'ont pas le choix d'être globaux
  *
- * ## Pourquoi un projet lié au classeur
+ * Une fonction n'est appelable par son nom, depuis l'extérieur du script, que
+ * si elle est déclarée au niveau supérieur **et** ne se termine pas par un
+ * trait de soulignement. Quatre mécanismes le réclament :
  *
- * Un projet lié donne `onOpen()` comme déclencheur simple : le menu apparaît
- * sans rien installer, et chaque action s'exécute sous l'identité de qui la
- * déclenche. Un projet autonome exigerait un déclencheur installable, lequel
- * s'exécute sous l'identité de celui qui l'a posé — de sorte que toute
- * personne à qui l'on partagerait le classeur agirait sur **sa** boîte Gmail
- * à lui. Pour un outil qui supprime définitivement du courrier, c'est une
- * faute, et la bonne défense est celle qu'on n'a pas eu à coder.
+ *   - `onOpen`, déclencheur simple ;
+ *   - les gestionnaires de menu, résolus par leur nom au clic ;
+ *   - les cibles de déclencheurs, résolues au réveil ;
+ *   - et `menageExecuterAction`, cible de `google.script.run`.
  *
- * Le ménage automatique, lui, demande un déclencheur temporel : c'est la seule
- * chose qui s'installe, et elle s'installe depuis le menu, par le propriétaire.
+ * Ce dernier cas a coûté une version. Les six actions de modale s'appelaient
+ * `executerAppliquerPlan_`, `executerInstallerClasseur_`… et la documentation
+ * est formelle : « les fonctions serveur dont le nom se termine par un trait
+ * de soulignement sont considérées comme privées ; elles ne peuvent pas être
+ * appelées par `google.script` et leurs noms ne sont jamais envoyés au
+ * client ». Le client appelait donc `undefined()`, ce qui lève une erreur
+ * **côté navigateur** — que `withFailureHandler` ne rattrape pas, puisqu'il
+ * n'écoute que le serveur. Les boutons étaient déjà masqués : la modale
+ * restait figée sur son rouet, et les six actions du menu étaient mortes.
+ *
+ * D'où un seul nom exposé, qui aiguille sur une table fermée. Un nom de plus
+ * au menu d'exécution au lieu de six, et la liste des actions atteignables
+ * depuis le navigateur se lit d'un coup d'œil.
  */
 
 /** Déclencheur simple : aucune autorisation demandée, aucune identité empruntée. */
 function onOpen() {
   SpreadsheetApp.getUi()
-    .createMenu('Ménage Gmail')
+    .createMenu(menageTraductions_('titre_outil'))
     .addItem(menageTraductions_('menu_preparer'), 'preparerLePlanDeMenage')
     .addItem(menageTraductions_('menu_appliquer'), 'appliquerLePlanDeMenage')
     .addSeparator()
@@ -45,38 +51,113 @@ function onOpen() {
 }
 
 /* --------------------------------------------------------------------------
+ * Ce que les modales peuvent lancer
+ * ----------------------------------------------------------------------- */
+
+/**
+ * La table des actions atteignables depuis une modale.
+ *
+ * Fermée, et c'est le point : `menageExecuterAction` ne peut rien appeler qui
+ * ne figure pas ici. Le nom vient du navigateur, et l'on n'exécute jamais
+ * quelque chose que l'on n'a pas nommé soi-même à l'avance.
+ *
+ * Chaque action rend `{ corps }`, du HTML prêt à l'affichage, ou rien du tout
+ * — auquel cas la modale se ferme. Ce qui vient d'ailleurs que des
+ * traductions passe par `menageTexteVersHtml_`, qui échappe.
+ */
+const MENAGE_MODALE_ACTIONS_ = {
+  preparer: () => {
+    const resultat = SocleExecution.sousVerrou(() => {
+      const archivees = menageArchiverPlan_();
+      const purgees = menagePurgerQuarantaine_(menageIdentifiantsTraites_(), new Date());
+      const prepare = menageOperation_().preparer({ remplacer: true });
+      const precochees = menagePrecocherLesDecisionsDeReglage_();
+      return { archivees, purgees, prepare, precochees };
+    });
+
+    if (!resultat.pris) throw new Error(menageTraductions_('erreur_verrou'));
+
+    const { archivees, purgees, prepare, precochees } = resultat.valeur;
+    return {
+      corps: menageTexteVersHtml_(
+        menageResumePreparation_(prepare, precochees, archivees, purgees)),
+    };
+  },
+
+  appliquer: () => {
+    const resultat = SocleExecution.sousVerrou(() => menageOperation_().appliquer());
+    if (!resultat.pris) throw new Error(menageTraductions_('erreur_verrou'));
+    return { corps: menageTexteVersHtml_(menageResumeApplication_(resultat.valeur)) };
+  },
+
+  installer: () => {
+    const { poses, reglages } = menageInstaller_();
+    return {
+      corps: menageTraductions_('texte_installer',
+        poses.length > 0 ? poses.join(', ') : menageTraductions_('aucun_tout_la'),
+        reglages.length > 0 ? reglages.join(', ') : menageTraductions_('aucun'),
+        MENAGE_ONGLETS_.guide),
+    };
+  },
+
+  oublier: () => {
+    const resultat = menageOperation_().oublierEtat();
+    return { corps: menageTraductions_('texte_oublier', resultat.remises, resultat.declencheurs) };
+  },
+
+  programmer: () => {
+    menageRetirerDeclencheursQuotidiens_();
+    ScriptApp.newTrigger('executerLeMenageQuotidien').timeBased().atHour(4).everyDays(1).create();
+    return { corps: menageTraductions_('texte_programmer') };
+  },
+
+  arreter: () => {
+    const retires = menageRetirerDeclencheursQuotidiens_();
+    return {
+      corps: retires === 0
+        ? menageTraductions_('texte_arreter_aucun')
+        : menageTraductions_('texte_arreter_fait', retires),
+    };
+  },
+};
+
+/**
+ * Le seul nom que `google.script.run` peut atteindre.
+ *
+ * Sans trait de soulignement final, donc visible au menu d'exécution de
+ * l'éditeur : c'est le prix, et il est payé une fois plutôt que six. Lancée
+ * de là, sans argument, elle échoue en nommant ce qu'elle attendait — plutôt
+ * que de laisser croire qu'elle n'a rien fait.
+ *
+ * @param {string} nom une clé de `MENAGE_MODALE_ACTIONS_`
+ * @returns {{corps: string}}
+ */
+function menageExecuterAction(nom) {
+  const action = MENAGE_MODALE_ACTIONS_[nom];
+
+  if (typeof action !== 'function') {
+    throw SocleErreurs.erreur({
+      quoi: menageTraductions_('erreur_action_inconnue', nom),
+      quoiFaire: `Les actions connues sont : ${Object.keys(MENAGE_MODALE_ACTIONS_).join(', ')}. `
+        + 'Cette fonction est appelée par les modales, pas depuis le menu d’exécution.',
+    });
+  }
+
+  return action();
+}
+
+/* --------------------------------------------------------------------------
  * Les deux temps
  * ----------------------------------------------------------------------- */
 
-/** Lance la préparation en arrière-plan via la modale. */
+/**
+ * Prépare le plan.
+ *
+ * Aucune confirmation : la préparation ne modifie rien, et la demander userait
+ * le seul geste qui compte — celui qui précède une suppression définitive.
+ */
 function preparerLePlanDeMenage() {
-  MenageUi.afficherConfirmation(
-    menageTraductions_('titre_erreur'),
-    menageTraductions_('menu_preparer') + ' ?',
-    'executerPreparerPlan_'
-  );
-}
-
-/** Fonction globale appelée par la modale pour préparer le plan. */
-function executerPreparerPlan_() {
-  const resultat = SocleExecution.sousVerrou(() => {
-    const archivees = menageArchiverPlan_();
-    const purgees = menagePurgerQuarantaine_(menageIdentifiantsTraites_(), new Date());
-    const prepare = menageOperation_().preparer({ remplacer: true });
-    const precochees = menagePrecocherLesDecisionsDeReglage_();
-    return { archivees, purgees, prepare, precochees };
-  });
-
-  if (!resultat.pris) {
-    throw new Error(menageTraductions_('erreur_verrou'));
-  }
-
-  const { archivees, purgees, prepare, precochees } = resultat.valeur;
-  
-  return {
-    titre: menageTraductions_('titre_preparation'),
-    corps: menageResumePreparation_(prepare, precochees, archivees, purgees).replace(/\n/g, '<br>')
-  };
+  MenageUi.afficherTravail(menageTraductions_('titre_preparation'), 'preparer');
 }
 
 /** Applique les lignes cochées, après avoir annoncé leur nombre exact. */
@@ -85,37 +166,23 @@ function appliquerLePlanDeMenage() {
 
   if (bilan.aTraiter === 0) {
     MenageUi.afficherMessage(
-      menageTraductions_('titre_erreur'),
-      menageTraductions_('erreur_rien_a_traiter', bilan.onglet, bilan.lignes, bilan.validees)
-    );
+      menageTraductions_('titre_confirmer'),
+      menageTraductions_('erreur_rien_a_traiter', bilan.onglet, bilan.lignes, bilan.validees));
     return;
   }
 
-  const suppressions = menageCompterParAction_(MENAGE_ACTIONS_.supprimer);
-  
   MenageUi.afficherConfirmation(
     menageTraductions_('titre_confirmer'),
-    menageTraductions_('texte_confirmer', bilan.aTraiter, suppressions),
-    'executerAppliquerPlan_'
-  );
-}
-
-/** Fonction globale appelée par la modale pour appliquer le plan. */
-function executerAppliquerPlan_() {
-  const resultat = SocleExecution.sousVerrou(() => menageOperation_().appliquer());
-
-  if (!resultat.pris) {
-    throw new Error(menageTraductions_('erreur_verrou'));
-  }
-
-  return {
-    titre: menageTraductions_('titre_application'),
-    corps: menageResumeApplication_(resultat.valeur).replace(/\n/g, '<br>')
-  };
+    menageTraductions_('texte_confirmer', bilan.aTraiter, menageCompterParAction_(MENAGE_ACTIONS_.supprimer)),
+    'appliquer');
 }
 
 /**
  * Cible du déclencheur de reprise.
+ *
+ * Doit rester une `function` déclarée portant exactement le nom inscrit dans
+ * `MENAGE_FONCTION_REPRISE_` : un déclencheur est résolu par son nom global au
+ * moment où il se réveille, et rien ne signale l'erreur avant.
  */
 function reprendreLApplicationDuMenage() {
   const resultat = SocleExecution.sousVerrou(() => menageOperation_().reprendre());
@@ -130,8 +197,20 @@ function reprendreLApplicationDuMenage() {
  * Ménage automatique
  * ----------------------------------------------------------------------- */
 
+/** Retire les déclencheurs quotidiens et dit combien. */
+const menageRetirerDeclencheursQuotidiens_ = () => {
+  const vises = ScriptApp.getProjectTriggers()
+    .filter((declencheur) => declencheur.getHandlerFunction() === 'executerLeMenageQuotidien');
+  vises.forEach((declencheur) => ScriptApp.deleteTrigger(declencheur));
+  return vises.length;
+};
+
 /**
  * Cible du déclencheur quotidien : prépare, puis applique ce qui est pré-coché.
+ *
+ * Les lignes proposées par le détecteur ne sont pas cochées et ne partent donc
+ * pas : elles attendent dans le plan qu'on les relise. Une exécution
+ * automatique n'exerce que la politique de rétention, jamais un jugement.
  */
 function executerLeMenageQuotidien() {
   const resultat = SocleExecution.sousVerrou(() => {
@@ -152,54 +231,30 @@ function executerLeMenageQuotidien() {
   console.log(`Ménage Gmail v${MENAGE_VERSION_} — ${prepare.lignes} ligne(s) au plan, `
     + `${precochees} pré-cochée(s), ${applique.traitees} appliquée(s), `
     + `${applique.restant} en attente.`);
+
   const echecs = SocleErreurs.bilan();
   if (echecs.total > 0) {
     console.warn(`${echecs.total} échec(s) absorbé(s) : `
-      + echecs.causes.map((c) => `${c.cause} ×${c.occurrences}`).join(', '));
+      + echecs.causes.map((cause) => `${cause.cause} ×${cause.occurrences}`).join(', '));
   }
 }
 
-/** Pose le déclencheur quotidien, après avoir retiré les précédents. */
+/**
+ * Programme le ménage quotidien.
+ *
+ * Confirmation demandée : c'est la seule action, avec l'application du plan,
+ * qui engage l'outil à agir **sans personne devant l'écran**.
+ */
 function programmerLeMenageQuotidien() {
   MenageUi.afficherConfirmation(
-    menageTraductions_('titre_erreur'),
-    menageTraductions_('texte_programmer'),
-    'executerProgrammerMenage_'
-  );
+    menageTraductions_('titre_planification'),
+    menageTraductions_('question_programmer'),
+    'programmer');
 }
 
-function executerProgrammerMenage_() {
-  ScriptApp.getProjectTriggers()
-    .filter((declencheur) => declencheur.getHandlerFunction() === 'executerLeMenageQuotidien')
-    .forEach((declencheur) => ScriptApp.deleteTrigger(declencheur));
-
-  ScriptApp.newTrigger('executerLeMenageQuotidien').timeBased().atHour(4).everyDays(1).create();
-  
-  return {
-    titre: menageTraductions_('titre_erreur'),
-    corps: menageTraductions_('texte_programmer')
-  };
-}
-
-/** Retire le déclencheur quotidien. */
+/** Retire le déclencheur quotidien. Réversible, donc sans confirmation. */
 function arreterLeMenageQuotidien() {
-  MenageUi.afficherConfirmation(
-    menageTraductions_('titre_erreur'),
-    menageTraductions_('menu_arreter') + ' ?',
-    'executerArreterMenage_'
-  );
-}
-
-function executerArreterMenage_() {
-  const retires = ScriptApp.getProjectTriggers()
-    .filter((declencheur) => declencheur.getHandlerFunction() === 'executerLeMenageQuotidien');
-
-  retires.forEach((declencheur) => ScriptApp.deleteTrigger(declencheur));
-
-  return {
-    titre: menageTraductions_('titre_erreur'),
-    corps: retires.length === 0 ? menageTraductions_('texte_arreter_aucun') : menageTraductions_('texte_arreter_fait', retires.length)
-  };
+  MenageUi.afficherTravail(menageTraductions_('titre_planification'), 'arreter');
 }
 
 /* --------------------------------------------------------------------------
@@ -211,62 +266,37 @@ function afficherLEtatDuPlan() {
   const bilan = menageOperation_().bilan();
 
   const parEtat = Object.keys(bilan.parEtat)
-    .map((etat) => `• ${etat || '(vide)'} : ${bilan.parEtat[etat]}`)
+    .map((etat) => `• ${SocleTexte.echapperHtml(etat || '(vide)')} : ${bilan.parEtat[etat]}`)
     .join('<br>');
 
   MenageUi.afficherMessage(
     menageTraductions_('titre_etat'),
-    menageTraductions_('texte_etat', 
-      bilan.onglet, 
-      bilan.lignes, 
-      bilan.validees, 
-      bilan.aTraiter, 
-      parEtat, 
-      bilan.reprisePrevue ? menageTraductions_('oui') : menageTraductions_('non')
-    )
-  );
+    menageTraductions_('texte_etat',
+      SocleTexte.echapperHtml(bilan.onglet),
+      bilan.lignes,
+      bilan.validees,
+      bilan.aTraiter,
+      parEtat,
+      menageTraductions_(bilan.reprisePrevue ? 'oui' : 'non')));
 }
 
 /** Remet en file ce qui a calé, sans toucher à ce qui a eu lieu. */
 function oublierLEtatDuPlan() {
-  MenageUi.afficherConfirmation(
-    menageTraductions_('titre_erreur'),
-    menageTraductions_('menu_oublier') + ' ?',
-    'executerOublierEtat_'
-  );
-}
-
-function executerOublierEtat_() {
-  const resultat = menageOperation_().oublierEtat();
-  return {
-    titre: menageTraductions_('titre_erreur'),
-    corps: menageTraductions_('texte_oublier', resultat.remises, resultat.declencheurs)
-  };
+  MenageUi.afficherTravail(menageTraductions_('titre_oubli'), 'oublier');
 }
 
 /** Installe ou complète les onglets du classeur. Rejouable sans risque. */
 function installerLeClasseur() {
-  MenageUi.afficherConfirmation(
-    menageTraductions_('titre_erreur'),
-    menageTraductions_('menu_installer') + ' ?',
-    'executerInstallerClasseur_'
-  );
-}
-
-function executerInstallerClasseur_() {
-  const { poses, reglages } = menageInstaller_();
-  
-  const textePoses = poses.length > 0 ? poses.join(', ') : menageTraductions_('aucun_tout_la');
-  const texteReglages = reglages.length > 0 ? reglages.join(', ') : menageTraductions_('aucun');
-  
-  return {
-    titre: menageTraductions_('titre_erreur'),
-    corps: menageTraductions_('texte_installer', textePoses, texteReglages, MENAGE_ONGLETS_.guide)
-  };
+  MenageUi.afficherTravail(menageTraductions_('titre_installation'), 'installer');
 }
 
 /**
  * Ce qui tourne, et sous quelles portées.
+ *
+ * La version s'affiche là où l'on se demande ce qui tourne : un déploiement
+ * Apps Script sert une copie figée du code, et c'est le seul moyen de savoir
+ * laquelle. Les portées y figurent parce qu'elles ont un coût que
+ * l'utilisateur a le droit de peser — assorti d'une compensation vérifiable.
  */
 function afficherAPropos() {
   const reglages = menageReglages_();
@@ -274,12 +304,11 @@ function afficherAPropos() {
   MenageUi.afficherMessage(
     menageTraductions_('titre_propos', MENAGE_VERSION_),
     menageTraductions_('texte_propos',
+      MENAGE_VERSION_,
       reglages.retentionCorbeille,
       reglages.retentionQuarantaine,
       reglages.examenMax,
-      reglages.suppressionHeuristique ? menageTraductions_('oui') : menageTraductions_('non'),
-      reglages.protegerContacts ? menageTraductions_('oui') : menageTraductions_('non')
-    ),
-    { hauteur: 550, largeur: 600 }
-  );
+      menageTraductions_(reglages.suppressionHeuristique ? 'oui' : 'non'),
+      menageTraductions_(reglages.protegerContacts ? 'oui' : 'non')),
+    { hauteur: 620, largeur: 620 });
 }

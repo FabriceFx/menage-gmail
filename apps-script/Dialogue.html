@@ -2,49 +2,55 @@
 <html>
 <head>
   <base target="_top">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
+    /*
+     * Les polices restent celles du système.
+     *
+     * Un appel à Google Fonts coûtait une requête externe par ouverture, pour
+     * un dialogue qui vit quelques secondes : la police arrivait rarement
+     * avant qu'on le referme, et le texte changeait de graisse sous les yeux
+     * de l'utilisateur quand elle arrivait. La pile ci-dessous rend la même
+     * chose partout, sans réseau.
+     */
     :root {
-      --md-sys-color-primary: #0b57d0;
-      --md-sys-color-on-primary: #ffffff;
-      --md-sys-color-surface: #ffffff;
-      --md-sys-color-on-surface: #1f1f1f;
-      --md-sys-color-outline: #74777f;
-      --md-sys-color-error: #b3261e;
+      --couleur-primaire: #0b57d0;
+      --couleur-primaire-active: #0842a0;
+      --couleur-sur-primaire: #ffffff;
+      --couleur-fond: #ffffff;
+      --couleur-texte: #1f1f1f;
+      --couleur-contour: #74777f;
+      --couleur-erreur: #b3261e;
     }
     body {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Google Sans', Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       margin: 0;
       padding: 24px;
-      background-color: var(--md-sys-color-surface);
-      color: var(--md-sys-color-on-surface);
+      background-color: var(--couleur-fond);
+      color: var(--couleur-texte);
       display: flex;
       flex-direction: column;
-      height: 100vh; /* Using vh allows the box to fit the modal */
+      height: 100vh;
       box-sizing: border-box;
     }
-    .content-area {
+    .corps {
       flex-grow: 1;
       overflow-y: auto;
       font-size: 14px;
       line-height: 1.6;
     }
-    .content-area p {
-      margin-top: 0;
-    }
+    .corps p { margin-top: 0; }
     .actions {
       display: flex;
       justify-content: flex-end;
+      align-items: center;
       gap: 8px;
       margin-top: 24px;
       padding-top: 16px;
-      border-top: 1px solid rgba(0,0,0,0.1);
+      border-top: 1px solid rgba(0, 0, 0, 0.1);
       flex-shrink: 0;
     }
-    .btn {
-      font-family: 'Inter', sans-serif;
+    .bouton {
+      font-family: inherit;
       font-size: 14px;
       font-weight: 500;
       padding: 10px 24px;
@@ -54,107 +60,138 @@
       border: none;
       outline: none;
     }
-    .btn-primary {
-      background-color: var(--md-sys-color-primary);
-      color: var(--md-sys-color-on-primary);
+    .bouton-primaire {
+      background-color: var(--couleur-primaire);
+      color: var(--couleur-sur-primaire);
     }
-    .btn-primary:hover {
-      box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
-      background-color: #0842a0;
+    .bouton-primaire:hover {
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
+      background-color: var(--couleur-primaire-active);
     }
-    .btn-secondary {
+    .bouton-secondaire {
       background-color: transparent;
-      color: var(--md-sys-color-primary);
-      border: 1px solid var(--md-sys-color-outline);
+      color: var(--couleur-primaire);
+      border: 1px solid var(--couleur-contour);
     }
-    .btn-secondary:hover {
-      background-color: rgba(11, 87, 208, 0.08);
-    }
-    #loading {
+    .bouton-secondaire:hover { background-color: rgba(11, 87, 208, 0.08); }
+    .bouton:focus-visible { outline: 2px solid var(--couleur-primaire); outline-offset: 2px; }
+    #attente {
       display: none;
       align-items: center;
       gap: 12px;
-      color: var(--md-sys-color-primary);
+      margin-right: auto;
+      color: var(--couleur-primaire);
       font-weight: 500;
       font-size: 14px;
     }
-    .spinner {
+    .rouet {
       width: 20px;
       height: 20px;
       border: 3px solid rgba(11, 87, 208, 0.2);
-      border-top-color: var(--md-sys-color-primary);
+      border-top-color: var(--couleur-primaire);
       border-radius: 50%;
-      animation: spin 1s linear infinite;
+      animation: tourner 1s linear infinite;
     }
-    @keyframes spin { 
-      to { transform: rotate(360deg); } 
+    @keyframes tourner { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      .rouet { animation-duration: 3s; }
     }
-    a {
-      color: var(--md-sys-color-primary);
-      text-decoration: none;
-    }
-    a:hover {
-      text-decoration: underline;
-    }
+    .echec { color: var(--couleur-erreur); font-weight: 500; }
+    a { color: var(--couleur-primaire); text-decoration: none; }
+    a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
 
-  <div class="content-area" id="content">
-    <?!= corps ?>
-  </div>
+  <div class="corps" id="corps"><?!= corps ?></div>
 
   <div class="actions">
-    <div id="loading">
-      <div class="spinner"></div>
-      <span id="loading-text"></span>
+    <div id="attente">
+      <div class="rouet"></div>
+      <span id="attente-texte"></span>
     </div>
-    <div id="button-group">
-      <? if (type === 'confirmation') { ?>
-        <button class="btn btn-secondary" onclick="fermer()"><?= texteNon ?></button>
-        <button class="btn btn-primary" onclick="valider()"><?= texteOui ?></button>
-      <? } else { ?>
-        <button class="btn btn-primary" onclick="fermer()"><?= texteOk ?></button>
+    <div id="boutons">
+      <? if (mode === 'confirmation') { ?>
+        <button class="bouton bouton-secondaire" onclick="fermer()"><?= texteNon ?></button>
+        <button class="bouton bouton-primaire" onclick="lancer()"><?= texteOui ?></button>
+      <? } else if (mode === 'info') { ?>
+        <button class="bouton bouton-primaire" onclick="fermer()"><?= texteOk ?></button>
       <? } ?>
     </div>
   </div>
 
   <script>
+    /*
+     * Les valeurs venues du serveur passent par `JSON.parse` d'un littéral
+     * produit côté serveur plutôt que d'être écrites directement dans le code.
+     * Un scriptlet d'impression échappe pour le contexte où il se trouve, et
+     * se fier à cet échappement à l'intérieur d'une chaîne JavaScript est une
+     * subtilité qu'on finit par oublier en recopiant le fichier ailleurs.
+     */
+    var CONFIG = JSON.parse(<?= JSON.stringify(JSON.stringify({
+      mode: mode, action: action, texteOk: texteOk,
+      texteChargement: texteChargement, texteErreur: texteErreur
+    })) ?>);
+
     function fermer() {
       google.script.host.close();
     }
-    function valider() {
-      document.getElementById('button-group').style.display = 'none';
-      const loading = document.getElementById('loading');
-      document.getElementById('loading-text').innerText = <?= texteChargement ?>;
-      loading.style.display = 'flex';
-      
-      const action = <?= actionCallback ?>;
-      if (action) {
-        google.script.run
-          .withSuccessHandler(function(res) { 
-             if (res && res.titre) {
-               document.title = res.titre;
-             }
-             if (res && res.corps) {
-               document.getElementById('content').innerHTML = res.corps;
-               document.getElementById('button-group').innerHTML = '<button class="btn btn-primary" onclick="fermer()"><?= texteOk ?></button>';
-               document.getElementById('button-group').style.display = 'block';
-               loading.style.display = 'none';
-             } else {
-               google.script.host.close(); 
-             }
-          })
-          .withFailureHandler(function(err) {
-             document.getElementById('content').innerHTML = '<span style="color:var(--md-sys-color-error); font-weight: 500;">Erreur / Error :</span><br><br>' + err.message;
-             document.getElementById('button-group').innerHTML = '<button class="btn btn-secondary" onclick="fermer()"><?= texteOk ?></button>';
-             document.getElementById('button-group').style.display = 'block';
-             loading.style.display = 'none';
-          })
-          [action]();
-      } else {
-        fermer();
-      }
+
+    /** Remplace les boutons par un seul « fermer », après coup. */
+    function boutonUnique() {
+      var zone = document.getElementById('boutons');
+      zone.textContent = '';
+      var bouton = document.createElement('button');
+      bouton.className = 'bouton bouton-primaire';
+      bouton.textContent = CONFIG.texteOk;
+      bouton.onclick = fermer;
+      zone.appendChild(bouton);
+      zone.style.display = 'block';
+      document.getElementById('attente').style.display = 'none';
+      bouton.focus();
+    }
+
+    function lancer() {
+      document.getElementById('boutons').style.display = 'none';
+      document.getElementById('attente-texte').textContent = CONFIG.texteChargement;
+      document.getElementById('attente').style.display = 'flex';
+
+      if (!CONFIG.action) { fermer(); return; }
+
+      google.script.run
+        .withSuccessHandler(function (resultat) {
+          if (resultat && resultat.corps) {
+            document.getElementById('corps').innerHTML = resultat.corps;
+            boutonUnique();
+          } else {
+            google.script.host.close();
+          }
+        })
+        .withFailureHandler(function (erreur) {
+          /*
+           * `textContent` et non `innerHTML` : un message d'erreur recopie
+           * parfois une cellule du classeur, et rien ne garantit qu'elle ne
+           * contienne pas de balisage. Une modale qui rendrait le HTML d'une
+           * escroquerie serait une curieuse façon de s'en protéger.
+           */
+          var corps = document.getElementById('corps');
+          corps.textContent = '';
+          var titre = document.createElement('div');
+          titre.className = 'echec';
+          titre.textContent = CONFIG.texteErreur;
+          var texte = document.createElement('div');
+          texte.textContent = (erreur && erreur.message) ? erreur.message : String(erreur);
+          corps.appendChild(titre);
+          corps.appendChild(document.createElement('br'));
+          corps.appendChild(texte);
+          boutonUnique();
+        })
+        .menageExecuterAction(CONFIG.action);
+    }
+
+    // En mode « travail », l'action part sans attendre de clic.
+    if (CONFIG.mode === 'travail') {
+      window.addEventListener('load', lancer);
     }
   </script>
 </body>

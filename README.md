@@ -132,6 +132,38 @@ jugement ne se met pas dans une constante : corriger un faux positif ne doit
 demander aucun déploiement, et le code n'ajoute que les entrées nouvelles — il
 ne réécrit jamais une décision humaine.
 
+## L'interface, et la valeur d'une question
+
+L'outil parle par des fenêtres HTML plutôt que par les alertes de Sheets, et
+il est bilingue : il suit la langue du compte Google de qui l'exécute. Les noms
+d'onglets et de colonnes, eux, restent en français — ils servent de clés au
+code, et les traduire casserait les classeurs déjà installés.
+
+Trois formes de dialogue, et la distinction porte tout le sens :
+
+| Forme | Quand | Ce qu'elle fait |
+| --- | --- | --- |
+| `afficherMessage` | Une information. | Un bouton pour fermer. |
+| `afficherTravail` | Une action sans danger. | Lance aussitôt, montre l'avancement, puis le résultat. |
+| `afficherConfirmation` | Une action qu'on peut vouloir refuser. | Pose la question, puis lance. |
+
+**Deux actions seulement demandent confirmation** : appliquer le plan, parce
+qu'il supprime définitivement, et programmer le ménage quotidien, parce qu'il
+engage l'outil à agir sans personne devant l'écran. Tout le reste part
+directement.
+
+C'est un choix, et il se défend par l'inverse : une version antérieure
+demandait « Préparer le plan ? » avant une opération qui ne modifie rien.
+Quand tout demande confirmation, plus rien ne la mérite — on finit par cliquer
+« Oui » sans lire, et c'est précisément devant la suppression définitive qu'on
+aurait dû s'arrêter.
+
+Une dernière frontière, à un seul endroit : les textes du dictionnaire sont du
+HTML de confiance, écrit dans le dépôt. Tout ce qui vient d'ailleurs — résumé,
+nom d'onglet, message d'erreur — passe par `menageTexteVersHtml_`, qui échappe.
+Un outil qui affiche du balisage venu d'une escroquerie serait une curieuse
+façon de s'en protéger.
+
 ## Ce que l'outil ne peut pas faire
 
 **Protéger un message de Gmail lui-même.** Gmail vide seul la Corbeille et le
@@ -195,6 +227,9 @@ apps-script/
   MenageJournal.gs        archivage des plans appliqués
   MenageRapport.gs        pré-cochage et résumés
   MenageInstallation.gs   pose des onglets et du guide
+  MenageUi.gs             les trois formes de dialogue
+  MenageTraductions.gs    le dictionnaire français / anglais
+  Dialogue.html           le gabarit des fenêtres — un fichier HTML, pas un .gs
   PlanPuisApplication.gs  recopié de plan-puis-application, non modifié
   Socle*.gs               recopiés du socle Apps Script, non modifiés
 banc/
@@ -232,6 +267,9 @@ réintroduire un défaut doit faire échouer le banc :
 | Appeler `GmailApp.search` sans bornes | la recherche dépasse le plafond des 500 fils |
 | Ramener le seuil du détecteur à 2 | un message d'un ami sur Gmail disant « congratulations » n'est pas un déchet |
 | Déclarer une fonction interne en `function` | aucune fonction interne n'encombre le menu d'exécution |
+| Suffixer d'un `_` la cible de `google.script.run` | la cible de `google.script.run` est publique et déclarée |
+| Retirer une clé d'une seule des deux langues | les deux langues portent exactement les mêmes clés |
+| Injecter un résumé sans l'échapper | un résumé est échappé avant d'entrer dans une modale |
 
 Deux pièges du procédé, payés une fois. Les `const` de portée globale ne
 deviennent pas des propriétés de l'objet global : on les récupère par
@@ -327,6 +365,25 @@ gets seven days before deletion. Those days must be counted from the day we
 decided to distrust it — not from the message's own date, which may be months
 old. That quarantine date exists nowhere in Gmail, so it is kept in a sheet and
 written **immediately after** each move, never before and never in batches.
+
+## The interface, and the value of a question
+
+The tool speaks through HTML dialogs rather than Sheets alerts, and it is
+bilingual: it follows the Google account language of whoever runs it. Sheet and
+column names stay in French — they act as keys in the code, and translating
+them would break existing spreadsheets.
+
+**Only two actions ask for confirmation**: applying the plan, because it
+deletes permanently, and scheduling the daily cleanup, because it commits the
+tool to acting with nobody watching. Everything else runs straight away. An
+earlier version asked "Prepare the plan?" before an operation that changes
+nothing — when everything asks, nothing deserves an answer, and you end up
+clicking "Yes" unread exactly where you should have stopped.
+
+One boundary, in one place: dictionary strings are trusted HTML, written in the
+repository. Everything else — summaries, sheet names, error messages — goes
+through `menageTexteVersHtml_`, which escapes. A tool that rendered markup
+taken from a scam would be a strange way to protect against one.
 
 ## What the tool cannot do
 

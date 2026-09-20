@@ -19,7 +19,7 @@
  * sert une copie figée du code : ce numéro, affiché dans « À propos » et en
  * tête du journal, est le seul moyen de savoir laquelle tourne.
  */
-const MENAGE_VERSION_ = '1.1.0';
+const MENAGE_VERSION_ = '1.1.1';
 
 /* --------------------------------------------------------------------------
  * Onglets du classeur
