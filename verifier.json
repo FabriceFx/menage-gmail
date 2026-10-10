@@ -1,0 +1,7 @@
+{
+  "typesAcceptes": {
+    "MenageReferentiel.gs|TS2345|Argument of type 'string | number' is not assignable to parameter of type 'number'.   Type 'string' is not assignable to type 'number'.": 1,
+    "SocleErreurs.gs|TS2339|Property 'quoi' does not exist on type 'Error'.": 1,
+    "SocleErreurs.gs|TS2339|Property 'quoiFaire' does not exist on type 'Error'.": 1
+  }
+}
