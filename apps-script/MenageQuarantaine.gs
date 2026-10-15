@@ -58,8 +58,12 @@ const menageRegistreQuarantaine_ = () => {
     // Normaliser à la lecture, jamais à l'écriture : Sheets rend un objet
     // `Date` là où l'on avait écrit une chaîne, et `String(valeur)` donnerait
     // « Thu May 14 2026 » — qui se trie sur le nom du jour.
-    const jour = SocleDates.jour(ligne['Entré en quarantaine le']);
-    if (jour) registre.set(identifiant, jour);
+    //
+    // Une date illisible ne fait pas sortir le message du registre : il y est
+    // gardé avec une date vide. L'écarter le ferait traiter comme un spam
+    // arrivé seul, jugé sur sa date de réception — et un vieux courriel mis
+    // en quarantaine le matin même partait en suppression définitive.
+    registre.set(identifiant, SocleDates.jour(ligne['Entré en quarantaine le']));
   });
 
   MENAGE_MEMOIRE_QUARANTAINE_.registre = registre;
@@ -75,11 +79,17 @@ const menageRegistreQuarantaine_ = () => {
  * *retarder* une suppression, jamais à l'avancer.
  */
 const menageAgeEnQuarantaine_ = (identifiant, ageDuMessage, maintenant) => {
-  const entree = menageRegistreQuarantaine_().get(identifiant);
-  if (!entree) return { age: ageDuMessage, depuisQuarantaine: false };
+  const registre = menageRegistreQuarantaine_();
+  if (!registre.has(identifiant)) return { age: ageDuMessage, depuisQuarantaine: false };
 
-  const age = menageAge_(new Date(`${entree}T12:00:00Z`), maintenant);
-  if (!age.connu) return { age: ageDuMessage, depuisQuarantaine: false };
+  // En quarantaine, mais depuis quand, on ne sait pas : l'âge est inconnu, et
+  // non celui du message. Retomber sur l'âge du message avancerait la
+  // suppression au lieu de la retarder — l'inverse de ce que le registre sert
+  // à faire.
+  const entree = registre.get(identifiant);
+  const age = entree
+    ? menageAge_(new Date(`${entree}T12:00:00Z`), maintenant)
+    : { connu: false, jours: null, date: null, cause: MENAGE_AGE_INCONNU_.dateInvalide };
 
   return { age, depuisQuarantaine: true };
 };
@@ -161,8 +171,11 @@ const menagePurgerQuarantaine_ = (identifiantsTraites, maintenant) => {
     const identifiant = String(ligne.Identifiant ?? '').trim();
     if (identifiant === '' || traites.has(identifiant)) return false;
 
+    // Une date illisible se garde : sans elle, le message perdrait sa
+    // quarantaine au passage suivant. La ligne attend qu'on la corrige — le
+    // plan l'affiche « à vérifier ».
     const jour = SocleDates.jour(ligne['Entré en quarantaine le']);
-    if (!jour) return false;
+    if (!jour) return true;
 
     const age = menageAge_(new Date(`${jour}T12:00:00Z`), maintenant);
     return !menageAgeDepasse_(age, gardeJours);

@@ -20,6 +20,7 @@
  *
  * SPAM
  *   expéditeur protégé          → laisser
+ *   quarantaine à date illisible → laisser, à vérifier
  *   quarantaine expirée         → supprimer
  *   message expiré              → supprimer
  *   sinon                       → laisser
@@ -122,6 +123,15 @@ const menageDeciderSpam_ = (vu, maintenant) => {
   }
 
   const { age, depuisQuarantaine } = menageAgeEnQuarantaine_(vu.identifiant, vu.age, maintenant);
+
+  if (depuisQuarantaine && !age.connu) {
+    return {
+      action: MENAGE_ACTIONS_.laisser,
+      decideur: null,
+      motif: `en quarantaine, mais ${menageAgeLisible_(age)} — date à vérifier dans l'onglet ${MENAGE_ONGLETS_.quarantaine}`,
+      verdict: null,
+    };
+  }
 
   if (menageAgeDepasse_(age, reglages.retentionQuarantaine)) {
     return {

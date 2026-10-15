@@ -471,6 +471,26 @@ verifier('la quarantaine expire au terme réglé', () => {
   egal(decision.action, actions.supprimer, 'huit jours de quarantaine, seuil à sept');
 });
 
+verifier('une date de quarantaine illisible ne fait pas sauter le sursis', () => {
+  // Défaut corrigé : la ligne à date illisible était écartée du registre, et
+  // le message jugé sur sa date de réception — 90 jours, donc suppression
+  // définitive le jour même de sa mise en quarantaine.
+  const contexte = contexteInstalle({ maintenant: LE_JOUR });
+  const actions = contexte.lire('MENAGE_ACTIONS_');
+  const feuille = contexte.classeur.getSheetByName('Quarantaine');
+  feuille.appendRow(['m-illisible', 'à vérifier', 'Inconnu <inconnu@essai.test>', 'Objet', 90]);
+
+  const decision = contexte.lire('menageDeciderSpam_')(
+    vu(contexte, { identifiant: 'm-illisible', dateMessage: ilYA(90) }), LE_JOUR);
+
+  egal(decision.action, actions.laisser, 'une quarantaine de date inconnue ne s’abrège pas');
+  vrai(/à vérifier/.test(decision.motif), `le motif dit quoi faire : « ${decision.motif} »`);
+
+  contexte.lire('menagePurgerQuarantaine_')([], LE_JOUR);
+  vrai(contexte.lire('menageRegistreQuarantaine_()').has('m-illisible'),
+    'et la purge garde la ligne, sans quoi le sursis tomberait au passage suivant');
+});
+
 verifier('la date de quarantaine survit au passage par Sheets', () => {
   const contexte = contexteInstalle();
   const feuille = contexte.classeur.getSheetByName('Quarantaine');

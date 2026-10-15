@@ -7,6 +7,13 @@ Ce projet suit le [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Corrigé
 
+- **Une date de quarantaine illisible faisait sauter le sursis de sept
+  jours.** Si la cellule « Entré en quarantaine le » ne se lisait plus —
+  retouchée à la main, abîmée —, le message sortait du registre et était jugé
+  sur sa date de réception : un vieux courriel mis en quarantaine le matin
+  même était proposé à la suppression définitive, avec un motif faux. Il est
+  désormais laissé en place, avec le motif « date à vérifier dans l'onglet
+  Quarantaine », et la purge garde sa ligne jusqu'à ce qu'on la corrige.
 - **Le banc ignorait la date qu'on lui donnait.** Le faux Google acceptait
   l'option `maintenant` sans la lire : un cas daté s'exécutait en réalité à la
   date du jour. Le cas « un message mis en quarantaine aujourd'hui n'est pas
