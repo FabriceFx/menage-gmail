@@ -236,15 +236,32 @@ class FauxGmail {
  * Assemblage du bac à sable
  * ----------------------------------------------------------------------- */
 
-const construireSandbox = ({ maintenant = new Date(), contacts = [], contactsEnEchec = false } = {}) => {
+const construireSandbox = ({ maintenant, contacts = [], contactsEnEchec = false } = {}) => {
   const classeur = new FauxClasseur();
+
+  // L'horloge du projet. `maintenant` a longtemps été accepté sans être lu :
+  // le code s'exécutait à la date réelle, et un cas écrit le 20 septembre
+  // pour « aujourd'hui » échouait trois semaines plus tard. L'horloge est
+  // décalée plutôt que figée, pour que le temps continue de passer : le
+  // budget des six minutes se mesure en temps écoulé.
+  const decalage = maintenant ? maintenant.getTime() - Date.now() : 0;
+  const DateDuProjet = class extends Date {
+    constructor(...valeurs) {
+      if (valeurs.length) super(...valeurs);
+      else super(Date.now() + decalage);
+    }
+    static now() { return Date.now() + decalage; }
+    // Les dates rendues par le faux classeur sont des Date de Node : elles
+    // doivent rester des `Date` pour le code, comme chez Google.
+    static [Symbol.hasInstance](valeur) { return valeur instanceof Date; }
+  };
   const gmail = new FauxGmail();
   const declencheurs = [];
   const proprietes = new Map();
 
   const sandbox = {
     console,
-    Date,
+    Date: DateDuProjet,
     Math,
     Number,
     String,
@@ -373,7 +390,7 @@ const construireSandbox = ({ maintenant = new Date(), contacts = [], contactsEnE
 
   sandbox.globalThis = sandbox;
   return {
-    sandbox, classeur, gmail, declencheurs, maintenant,
+    sandbox, classeur, gmail, declencheurs, maintenant: maintenant || new Date(),
   };
 };
 

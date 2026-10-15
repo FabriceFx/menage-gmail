@@ -416,6 +416,16 @@ verifier('réglage à Oui, le détecteur propose — et la ligne n’est pas pr�
   egal(decision.decideur, 'Détecteur', 'une décision du détecteur ne se pré-coche jamais');
 });
 
+verifier('le banc vit à la date qu’on lui donne', () => {
+  // Défaut du banc lui-même : `maintenant` était accepté sans être lu, et
+  // tout cas daté s'exécutait en réalité à la date du jour. Un banc dont
+  // l'horloge ment valide du code faux, ou condamne du code juste.
+  const contexte = contexteInstalle({ maintenant: LE_JOUR });
+  egal(contexte.lire('SocleDates.maintenantJour()'), '2026-09-20');
+  vrai(contexte.lire('new Date()') instanceof Date,
+    'la date du projet reste une Date pour le code');
+});
+
 /* ==========================================================================
  * 5. Quarantaine
  *    Défaut corrigé : la quarantaine était fictive. Le délai se comptait
@@ -425,7 +435,11 @@ verifier('réglage à Oui, le détecteur propose — et la ligne n’est pas pr�
  * ======================================================================= */
 
 verifier('un message mis en quarantaine aujourd’hui n’est pas supprimable aussitôt', () => {
-  const contexte = contexteInstalle();
+  // L'inscription et la décision doivent vivre le même jour. Sans horloge
+  // commune, l'inscription prenait la date réelle et paraissait, vue du
+  // 20 septembre, datée du futur : le cas échouait trois semaines après
+  // avoir été écrit.
+  const contexte = contexteInstalle({ maintenant: LE_JOUR });
   const actions = contexte.lire('MENAGE_ACTIONS_');
 
   contexte.lire('menageInscrireEnQuarantaine_')({

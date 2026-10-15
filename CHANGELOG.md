@@ -3,6 +3,17 @@
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 Ce projet suit le [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [Non publié]
+
+### Corrigé
+
+- **Le banc ignorait la date qu'on lui donnait.** Le faux Google acceptait
+  l'option `maintenant` sans la lire : un cas daté s'exécutait en réalité à la
+  date du jour. Le cas « un message mis en quarantaine aujourd'hui n'est pas
+  supprimable aussitôt », juste le 20 septembre, échouait depuis début octobre.
+  L'horloge du banc suit désormais la date demandée, et un cas le vérifie.
+  Le code de l'outil n'est pas en cause.
+
 ## [1.1.1] - 2026-09-20
 
 Version corrective. La 1.1.0 ne fonctionnait pas : aucune de ses fenêtres ne
